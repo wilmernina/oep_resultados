@@ -395,10 +395,6 @@ class ActaRegistroController extends Controller
                     'codigo_mesa' => 'La mesa ya fue registrada. Marca "Editar acta existente" para actualizarla.',
                 ])->withInput();
             }
-        } elseif (! $request->hasFile('acta_imagen')) {
-            return back()->withErrors([
-                'acta_imagen' => 'La imagen del acta es obligatoria para un registro nuevo.',
-            ])->withInput();
         }
 
         foreach ($data['votos'] as $fila) {
@@ -450,13 +446,13 @@ class ActaRegistroController extends Controller
 
             MesaOrgPolitica::where('codigo_mesa', $mesa->codigo_mesa)->delete();
 
-            foreach ($data['votos'] as $fila) {
-                MesaOrgPolitica::create([
-                    'codigo_mesa' => $mesa->codigo_mesa,
-                    'codigo_organizacion' => $fila['codigo_organizacion'],
-                    'registro_votos' => $fila['registro_votos'],
-                ]);
-            }
+            $insertData = collect($data['votos'])->map(fn ($fila) => [
+                'codigo_mesa' => $mesa->codigo_mesa,
+                'codigo_organizacion' => $fila['codigo_organizacion'],
+                'registro_votos' => $fila['registro_votos'],
+            ])->toArray();
+
+            DB::table('mesa_org_politica')->insert($insertData);
         });
 
         $mensaje = $editarExistente ? 'Acta actualizada correctamente.' : 'Acta registrada correctamente.';

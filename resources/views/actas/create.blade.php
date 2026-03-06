@@ -106,8 +106,8 @@
 
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label">Foto del Acta (cámara o archivo)</label>
-                    <input type="file" name="acta_imagen" id="acta_imagen" class="form-control" accept="image/*" capture="environment" required>
+                    <label class="form-label">Foto del Acta (opcional)</label>
+                    <input type="file" name="acta_imagen" id="acta_imagen" class="form-control" accept="image/*" capture="environment">
                     <small class="text-muted">Formatos: JPG, JPEG, PNG, WEBP. Máximo 5MB.</small>
                 </div>
                 <div class="col-md-6">
@@ -149,6 +149,11 @@ const mesasUrlTemplate = @json(route('actas.api.mesas', ['codigoRecinto' => '__R
 const organizacionesUrlTemplate = @json(route('actas.api.organizaciones', ['codigoMunicipio' => '__MUN__']));
 const detalleMesaUrlTemplate = @json(route('actas.api.mesa.detalle', ['codigoMesa' => '__MESA__']));
 
+const oldVotos = @json(old('votos'));
+const oldVotosBlancos = @json(old('votos_blancos'));
+const oldVotosNulos = @json(old('votos_nulos'));
+let yaCargadoOld = false;
+
 function setOptions(select, items, valueKey, labelKey, placeholder) {
     select.innerHTML = '';
     const initial = document.createElement('option');
@@ -186,6 +191,13 @@ async function cargarDetalleMesa(codigoMesa) {
         return;
     }
 
+    // Si tenemos valores old y es la primera carga tras error, priorizamos old
+    if (oldVotos && !yaCargadoOld && String(oldMesa) === String(codigoMesa)) {
+        aplicarValoresOld();
+        yaCargadoOld = true;
+        return;
+    }
+
     const url = detalleMesaUrlTemplate.replace('__MESA__', codigoMesa);
     const response = await fetch(url);
     if (!response.ok) {
@@ -219,6 +231,26 @@ async function cargarDetalleMesa(codigoMesa) {
         actaPreview.src = '';
         actaPlaceholder.style.display = 'block';
     }
+}
+
+function aplicarValoresOld() {
+    if (!oldVotos) return;
+    
+    const votosMap = {};
+    oldVotos.forEach(v => {
+        votosMap[String(v.codigo_organizacion)] = v.registro_votos;
+    });
+
+    document.querySelectorAll('input[name^="votos"][name$="[registro_votos]"]').forEach((input) => {
+        const codigo = input.dataset.codigoOrg;
+        if (votosMap[String(codigo)] !== undefined) {
+            input.value = votosMap[String(codigo)];
+        }
+    });
+
+    if (votosBlancosInput && oldVotosBlancos !== null) votosBlancosInput.value = oldVotosBlancos;
+    if (votosNulosInput && oldVotosNulos !== null) votosNulosInput.value = oldVotosNulos;
+    recalcularTotalValidos();
 }
 
 async function cargarProvincias(codigoDepartamento, selectedProvincia = null) {
@@ -293,13 +325,21 @@ async function cargarOrganizaciones(codigoMunicipio) {
     const response = await fetch(url);
     const data = await response.json();
 
+    const votosMap = {};
+    if (oldVotos && !yaCargadoOld && String(oldMunicipio) === String(codigoMunicipio)) {
+        oldVotos.forEach(v => {
+            votosMap[String(v.codigo_organizacion)] = v.registro_votos;
+        });
+    }
+
     data.forEach((org, i) => {
+        const valor = votosMap[String(org.codigo_organizacion)] !== undefined ? votosMap[String(org.codigo_organizacion)] : 0;
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <input type="hidden" name="votos[${i}][codigo_organizacion]" value="${org.codigo_organizacion}">
             <td>${org.nombre_organizacion}</td>
             <td>${org.sigla}</td>
-            <td><input type="number" name="votos[${i}][registro_votos]" data-codigo-org="${org.codigo_organizacion}" min="0" value="0" class="form-control" required></td>
+            <td><input type="number" name="votos[${i}][registro_votos]" data-codigo-org="${org.codigo_organizacion}" min="0" value="${valor}" class="form-control" required></td>
         `;
         body.appendChild(tr);
     });
@@ -395,7 +435,8 @@ function syncEditarExistenteCheckbox() {
     if (!selectedOption || !editarExistenteInput) return;
 
     const isRegistrada = selectedOption.dataset.registrada === '1';
-    editarExistenteInput.disabled = true;
+    // No deshabilitamos si está registrada, para que se envíe el valor
+    editarExistenteInput.disabled = !isRegistrada;
     editarExistenteInput.checked = isRegistrada;
 
     if (!mesaEstadoBadge) return;
