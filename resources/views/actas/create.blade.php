@@ -108,7 +108,7 @@
                 <div class="col-md-6">
                     <label class="form-label">Foto del Acta (opcional)</label>
                     <input type="file" name="acta_imagen" id="acta_imagen" class="form-control" accept="image/*" capture="environment">
-                    <small class="text-muted">Formatos: JPG, JPEG, PNG, WEBP. Máximo 5MB.</small>
+                    <small class="text-muted">Formatos: JPG, JPEG, PNG, WEBP. Máximo 20MB.</small>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Vista previa</label>

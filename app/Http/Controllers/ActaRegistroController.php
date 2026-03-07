@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Gd\Driver;
 
 class ActaRegistroController extends Controller
 {
@@ -361,7 +363,7 @@ class ActaRegistroController extends Controller
             'votos' => ['required', 'array', 'min:1'],
             'votos.*.codigo_organizacion' => ['required', 'exists:org_politicas,codigo_organizacion'],
             'votos.*.registro_votos' => ['required', 'integer', 'min:0'],
-            'acta_imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'acta_imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:20480'],
             'editar_existente' => ['nullable', 'boolean'],
         ]);
 
@@ -425,12 +427,31 @@ class ActaRegistroController extends Controller
         DB::transaction(function () use ($data, $request): void {
             $mesa = Mesa::lockForUpdate()->findOrFail($data['codigo_mesa']);
             $rutaImagen = $mesa->acta_imagen;
+
             if ($request->hasFile('acta_imagen')) {
                 if ($mesa->acta_imagen) {
                     Storage::disk('public')->delete($mesa->acta_imagen);
                 }
-                $rutaImagen = $request->file('acta_imagen')->store('actas', 'public');
+
+                $file = $request->file('acta_imagen');
+                $extension = strtolower($file->getClientOriginalExtension());
+                // Aseguramos que se guarde como jpg/jpeg para mejor compresión
+                $nombreArchivo = 'actas/'.uniqid().'.jpg';
+
+                // Procesamiento con Intervention Image v3
+                $manager = new ImageManager(new Driver());
+                $image = $manager->read($file);
+
+                // Redimensionar a 1200px de ancho manteniendo proporción (solo si es más grande)
+                $image->scale(width: 1200);
+
+                // Guardar como JPEG con calidad 75%
+                $encoded = $image->toJpeg(75);
+                Storage::disk('public')->put($nombreArchivo, $encoded);
+
+                $rutaImagen = $nombreArchivo;
             }
+
             $totalValidos = (int) collect($data['votos'])->sum('registro_votos');
             $blancos = (int) $data['votos_blancos'];
             $nulos = (int) $data['votos_nulos'];
